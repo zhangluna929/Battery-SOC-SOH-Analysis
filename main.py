@@ -1,22 +1,3 @@
-"""
-SOC / SOH Estimation Demo (Detailed Version)
--------------------------------------------
-电池荷电状态 (SOC) 与健康状态 (SOH) 估计：
-1. 数据结构与加载（支持 CSV / NumPy / JSON 配置）
-2. OCV-SOC 曲线拟合（多段线 + 多项式 + 插值三种方法）
-3. 三种 SOC 估计算法
-   3.1 库伦计数（CC）
-   3.2 开路电压修正（CC-OCV）
-   3.3 扩展卡尔曼滤波（EKF） + 无迹卡尔曼滤波（UKF）
-4. SOH 估计
-   4.1 容量衰减（Ah-throughput）
-   4.2 内阻上升 (DCF)
-5. 故障注入与鲁棒性测试
-6. 评估指标（RMSE、MAE、R²）与可视化
-7. YAML 配置文件支持，便于批量实验
-
-
-"""
 
 from __future__ import annotations
 import json
@@ -24,6 +5,8 @@ import yaml
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from numpy.linalg import inv
+from math import sqrt
 from pathlib import Path
 from typing import Tuple, Dict, List, Any
 
@@ -31,7 +14,6 @@ from typing import Tuple, Dict, List, Any
 np.random.seed(42)
 plt.style.use("seaborn-v0_8-whitegrid")
 
-# 配色统一
 COLORS = {
     "true": "black",
     "cc":   "tab:blue",
@@ -42,8 +24,6 @@ COLORS = {
 
 def ensure_dir(path: Path):
     path.mkdir(parents=True, exist_ok=True)
-
-
 
 class CycleData:
     """存储单条工况（电流、电压、温度）"""
@@ -93,9 +73,6 @@ cycle = CycleData(pattern, dt=1.0, capacity=2.5)
 cycle.add_true_soc(0.8)
 cycle.add_voltage(ocv_from_soc)
 
-
-
-
 def coulomb_counting(cycle: CycleData, soc0: float) -> np.ndarray:
     soc = np.zeros_like(cycle.current)
     soc[0] = soc0
@@ -107,15 +84,12 @@ def cc_with_ocv_correction(cycle: CycleData, soc_cc: np.ndarray) -> np.ndarray:
     soc_adj = soc_cc.copy()
     for k in range(0, len(soc_cc), 300):
         ocv_meas = cycle.voltage[k]
-        # 找到最接近的 SOC（可二分搜索加速）
         soc_range = np.linspace(0, 1, 10001)
         ocv_range = ocv_from_soc(soc_range)
         idx = np.argmin(np.abs(ocv_range - ocv_meas))
         soc_adj[k:] += soc_range[idx] - soc_adj[k]
     return np.clip(soc_adj, 0, 1)
 
-
-from numpy.linalg import inv
 
 def ekf(cycle: CycleData, soc0: float, Q: float=1e-5, R: float=1e-4) -> np.ndarray:
     N = len(cycle.current)
@@ -135,9 +109,6 @@ def ekf(cycle: CycleData, soc0: float, Q: float=1e-5, R: float=1e-4) -> np.ndarr
         soc_hat[k] = soc_pred + K*(cycle.voltage[k] - ocv_from_soc(soc_pred))
         P = (1 - K*H)*P_pred
     return soc_hat
-
-
-from math import sqrt
 
 class UKF:
     def __init__(self, Q: float, R: float):
@@ -159,9 +130,7 @@ class UKF:
         S = sqrt(self.n + self.lmbd) * np.sqrt(P_pred)
         sigmas = np.array([x_pred, x_pred + S, x_pred - S])
 
-
         sigmas_safe = np.clip(sigmas, 1e-6, 1 - 1e-6)
-
 
         zs = ocv_from_soc(sigmas_safe)
         z_pred = np.dot(self.Wm, zs)
@@ -186,20 +155,12 @@ def ukf(cycle: CycleData, soc0: float) -> np.ndarray:
         soc[k] = np.clip(soc[k], 0, 1)
     return soc
 
-# -------------------------------------------------------------
-# Section 3 — SOH 估计
-# -------------------------------------------------------------
-
 def soh_capacity_fade(cycle: CycleData, soc_true: np.ndarray) -> float:
     discharge_Ah = np.sum(-cycle.current[cycle.current < 0] * cycle.dt) / 3600
     return 1 - discharge_Ah / cycle.capacity
 
 def soh_internal_resistance(zero_r: float, r_now: float) -> float:
     return zero_r / r_now
-
-# -------------------------------------------------------------
-# Section 4 — 主执行与可视化
-# -------------------------------------------------------------
 
 soc_cc  = coulomb_counting(cycle, 0.8)
 soc_adj = cc_with_ocv_correction(cycle, soc_cc)
@@ -220,9 +181,6 @@ print("--- SOH 估计 ---")
 soh = soh_capacity_fade(cycle, cycle.soc_true)
 print(f"容量衰减法估计 SOH ≈ {soh*100:.2f} %")
 
-# -------------------------------------------------------------
-# 保存输出以便复现
-# -------------------------------------------------------------
 np.savez('results/soc_estimates.npz',
          soc_true=cycle.soc_true,
          soc_cc=soc_cc,
