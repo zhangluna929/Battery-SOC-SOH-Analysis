@@ -1,0 +1,281 @@
+# Battery Analysis Framework Configuration
+
+# Experiment Settings
+experiment:
+  name: "battery_soc_soh_analysis"
+  version: "1.0.0"
+  description: "Advanced battery state estimation and health prediction"
+  output_dir: "experiments/results"
+  seed: 42
+  log_level: "INFO"
+
+# Data Configuration
+data:
+  # Data sources
+  sources:
+    - type: "synthetic"
+      path: "data/synthetic/"
+      enabled: true
+    - type: "nasa"
+      path: "data/nasa_battery/"
+      enabled: false
+    - type: "panasonic"
+      path: "data/panasonic_18650/"
+      enabled: false
+  
+  # Data preprocessing
+  preprocessing:
+    normalization: "standard"  # standard, minmax, robust
+    smoothing:
+      enabled: true
+      method: "savgol"  # savgol, moving_average, gaussian
+      window_size: 5
+    outlier_removal:
+      enabled: true
+      method: "iqr"  # iqr, zscore, isolation_forest
+      threshold: 3.0
+    
+  # Train/validation/test split
+  split:
+    train_ratio: 0.7
+    val_ratio: 0.15
+    test_ratio: 0.15
+    strategy: "temporal"  # temporal, random, stratified
+
+# Battery Model Configuration
+battery:
+  # Physical parameters
+  chemistry: "LiFePO4"  # LiFePO4, NMC, LCO
+  nominal_capacity: 2.5  # Ah
+  nominal_voltage: 3.3   # V
+  max_voltage: 3.6       # V
+  min_voltage: 2.5       # V
+  
+  # Equivalent circuit model
+  circuit_model:
+    type: "Thevenin"  # Thevenin, Dual_RC, PNGV
+    parameters:
+      R0: 0.01    # Ohmic resistance
+      R1: 0.005   # Polarization resistance 1
+      C1: 3600    # Polarization capacitance 1
+      R2: 0.003   # Polarization resistance 2
+      C2: 1800    # Polarization capacitance 2
+  
+  # SOC-OCV relationship
+  soc_ocv:
+    type: "polynomial"  # polynomial, lookup_table, spline
+    coefficients: [2.5, 0.5, 0.8, -0.3, 0.2]
+    temperature_dependence: true
+
+# SOC Estimation Configuration
+soc_estimation:
+  # Available methods
+  methods:
+    # Traditional methods
+    coulomb_counting:
+      enabled: true
+      efficiency: 0.98
+      initial_soc: 0.8
+    
+    ekf:
+      enabled: true
+      process_noise: 1e-5
+      measurement_noise: 1e-4
+      initial_covariance: 1e-3
+    
+    ukf:
+      enabled: true
+      alpha: 1e-3
+      beta: 2
+      kappa: 0
+      process_noise: 1e-5
+      measurement_noise: 1e-4
+    
+    # Machine learning methods
+    lstm:
+      enabled: true
+      sequence_length: 50
+      hidden_size: 128
+      num_layers: 2
+      dropout: 0.2
+      learning_rate: 1e-3
+      batch_size: 32
+      epochs: 100
+      uncertainty_quantification: true
+    
+    transformer:
+      enabled: true
+      d_model: 128
+      nhead: 8
+      num_layers: 6
+      dim_feedforward: 512
+      dropout: 0.1
+      learning_rate: 1e-4
+      batch_size: 16
+      epochs: 100
+  
+  # Ensemble configuration
+  ensemble:
+    enabled: true
+    methods: ["ekf", "lstm", "transformer"]
+    weights: "performance_based"  # equal, performance_based, learned
+    confidence_threshold: 0.8
+
+# SOH Prediction Configuration
+soh_prediction:
+  # Available methods
+  methods:
+    capacity_fade:
+      enabled: true
+      model_type: "exponential"  # linear, exponential, polynomial
+    
+    impedance_analysis:
+      enabled: true
+      frequency_range: [0.01, 10000]  # Hz
+      features: ["real_impedance", "imaginary_impedance", "phase"]
+    
+    ica_dva:
+      enabled: true
+      voltage_range: [2.5, 3.6]
+      current_threshold: 0.1  # A
+      smoothing_window: 10
+    
+    ml_fusion:
+      enabled: true
+      base_models: ["random_forest", "xgboost", "neural_network"]
+      meta_model: "linear_regression"
+      cross_validation: 5
+  
+  # Remaining useful life (RUL) prediction
+  rul_prediction:
+    enabled: true
+    failure_threshold: 0.8  # 80% capacity retention
+    prediction_horizon: 500  # cycles
+    confidence_intervals: true
+
+# Fault Diagnosis Configuration
+fault_diagnosis:
+  # Anomaly detection
+  anomaly_detection:
+    enabled: true
+    methods:
+      isolation_forest:
+        contamination: 0.1
+        n_estimators: 100
+      
+      one_class_svm:
+        nu: 0.1
+        kernel: "rbf"
+      
+      autoencoder:
+        hidden_layers: [64, 32, 16, 32, 64]
+        learning_rate: 1e-3
+        epochs: 100
+        threshold_percentile: 95
+  
+  # Thermal runaway prediction
+  thermal_runaway:
+    enabled: true
+    temperature_threshold: 60  # Celsius
+    voltage_drop_threshold: 0.5  # V
+    current_spike_threshold: 5  # A
+    prediction_horizon: 60  # seconds
+
+# Optimization Configuration
+optimization:
+  # Multi-objective optimization
+  objectives:
+    - "minimize_estimation_error"
+    - "minimize_computational_cost"
+    - "maximize_robustness"
+  
+  # Optimization algorithms
+  algorithms:
+    - "nsga2"
+    - "pso"
+    - "differential_evolution"
+  
+  # Parameters
+  population_size: 100
+  generations: 500
+  mutation_rate: 0.1
+  crossover_rate: 0.9
+
+# Evaluation Configuration
+evaluation:
+  # Metrics
+  metrics:
+    soc:
+      - "rmse"
+      - "mae"
+      - "mape"
+      - "max_error"
+      - "r2_score"
+    
+    soh:
+      - "mape"
+      - "r2_score"
+      - "prediction_accuracy"
+    
+    computational:
+      - "inference_time"
+      - "memory_usage"
+      - "energy_consumption"
+  
+  # Benchmarking
+  benchmark:
+    enabled: true
+    datasets: ["synthetic", "nasa_b0005", "nasa_b0006"]
+    reference_methods: ["ekf", "ukf", "coulomb_counting"]
+  
+  # Statistical analysis
+  statistical_tests:
+    significance_level: 0.05
+    multiple_comparisons: "bonferroni"
+
+# Visualization Configuration
+visualization:
+  # Plot settings
+  style: "seaborn-v0_8-whitegrid"
+  color_palette: "tab10"
+  figure_size: [10, 6]
+  dpi: 300
+  save_format: "png"
+  
+  # Interactive plots
+  interactive:
+    enabled: true
+    backend: "plotly"
+    
+  # Dashboard
+  dashboard:
+    enabled: true
+    port: 8050
+    debug: false
+
+# Hardware Configuration
+hardware:
+  # Computational resources
+  device: "auto"  # auto, cpu, cuda
+  num_workers: 4
+  memory_limit: "8GB"
+  
+  # Parallel processing
+  parallel:
+    enabled: true
+    backend: "multiprocessing"  # multiprocessing, joblib, ray
+    n_jobs: -1
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/battery_analysis.log"
+  max_file_size: "10MB"
+  backup_count: 5
+  
+  # Experiment tracking
+  tracking:
+    enabled: true
+    backend: "tensorboard"  # tensorboard, wandb, mlflow
+    project_name: "battery_analysis" 
